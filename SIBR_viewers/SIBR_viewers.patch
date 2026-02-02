@@ -1,0 +1,149 @@
+diff --git a/SIBR_viewers/CMakeLists.txt b/SIBR_viewers/CMakeLists.txt
+index 8f26e80..8ff93ce 100755
+--- a/SIBR_viewers/CMakeLists.txt
++++ b/SIBR_viewers/CMakeLists.txt
+@@ -7,13 +7,13 @@
+ # 
+ # For inquiries contact sibr@inria.fr and/or George.Drettakis@inria.fr
+ 
+-CMAKE_MINIMUM_REQUIRED(VERSION 3.30)
++CMAKE_MINIMUM_REQUIRED(VERSION 3.26)
+ 
+ set (CMAKE_SYSTEM_VERSION 10.0.15063.0 CACHE INTERNAL "Cmake system version" FORCE)
+ PROJECT(sibr_projects)
+ 
+-set(REQUIRED_VERSION "3.30.0")
+-set(CHECKED_VERSION "3.30.0")
++set(REQUIRED_VERSION "3.26.0")
++set(CHECKED_VERSION "3.26.0")
+ 
+ if (CMAKE_VERSION VERSION_LESS REQUIRED_VERSION)
+     message(WARNING "Deprecated version of cmake. Please update to at least ${REQUIRED_VERSION} (${CHECKED_VERSION} recommended).")
+diff --git a/SIBR_viewers/cmake/linux/dependencies.cmake b/SIBR_viewers/cmake/linux/dependencies.cmake
+index 5ad95af..8a84987 100755
+--- a/SIBR_viewers/cmake/linux/dependencies.cmake
++++ b/SIBR_viewers/cmake/linux/dependencies.cmake
+@@ -117,13 +117,14 @@ include_directories(${FFMPEG_INCLUDE_DIR})
+ ## Find embree3
+ ###################
+ sibr_addlibrary(
+-    NAME embree
++    NAME embree3
+     MSVC11 "https://repo-sam.inria.fr/fungraph/dependencies/ibr-common/win3rdParty-MSVC11-splitted%20version/embree2.7.0.x64.windows.7z"
+     MSVC14 "https://repo-sam.inria.fr/fungraph/dependencies/ibr-common/win3rdParty-MSVC15-splitted%20version/embree-3.6.1.x64.vc14.windows.7z"     # TODO SV: provide a valid version if required
+ )
+ 
+ # CLUSTER
+-find_package(embree 4.0 )
++find_package(Embree REQUIRED)
++include_directories(${EMBREE_INCLUDE_DIR})
+ 
+ ###################
+ ## Find eigen3
+diff --git a/SIBR_viewers/src/core/raycaster/CMakeLists.txt b/SIBR_viewers/src/core/raycaster/CMakeLists.txt
+index f2ddff8..b0cd162 100755
+--- a/SIBR_viewers/src/core/raycaster/CMakeLists.txt
++++ b/SIBR_viewers/src/core/raycaster/CMakeLists.txt
+@@ -23,7 +23,7 @@ include_directories(
+ if(WIN32)
+ target_link_libraries(${PROJECT_NAME}
+ 	OpenMP::OpenMP_CXX
+-	embree3
++	${EMBREE_LIBRARIES}
+ 	sibr_graphics
+ 	sibr_assets
+ 	nanoflann
+@@ -31,7 +31,7 @@ target_link_libraries(${PROJECT_NAME}
+ else()
+ target_link_libraries(${PROJECT_NAME}
+ 	OpenMP::OpenMP_CXX
+-	embree
++	${EMBREE_LIBRARIES}
+ # CLUSTER
+ #	/data/graphdeco/share/tbb/lib64/libtbb.so
+ 	sibr_graphics
+diff --git a/SIBR_viewers/src/core/raycaster/Raycaster.cpp b/SIBR_viewers/src/core/raycaster/Raycaster.cpp
+index 523c06a..0667624 100755
+--- a/SIBR_viewers/src/core/raycaster/Raycaster.cpp
++++ b/SIBR_viewers/src/core/raycaster/Raycaster.cpp
+@@ -208,9 +208,9 @@ namespace sibr
+ 			SIBR_ERR << "cannot initialize embree, failed cast rays." << std::endl;
+ 		else
+ 		{
+-			RTCOccludedArguments args;
+-			rtcInitOccludedArguments(&args);
+-			rtcOccluded1(*_scene.get(), &ray, &args);
++			RTCIntersectContext context;
++			rtcInitIntersectContext(&context);
++			rtcOccluded1(*_scene.get(), &context, &ray);
+ 		}
+ 		return ray.tfar < 0.0f;
+ 	}
+@@ -237,9 +237,9 @@ namespace sibr
+ 			SIBR_ERR << "cannot initialize embree, failed cast rays." << std::endl;
+ 		else
+ 		{
+-			RTCOccludedArguments args;
+-			rtcInitOccludedArguments(&args);
+-			rtcOccluded8(valid8, *_scene.get(), &ray, &args);
++			RTCIntersectContext context;
++			rtcInitIntersectContext(&context);
++			rtcOccluded8(valid8, *_scene.get(), &context, &ray);
+ 		}
+ 
+ 		std::array<bool, 8> res;
+@@ -272,9 +272,9 @@ namespace sibr
+ 			SIBR_ERR << "cannot initialize embree, failed cast rays." << std::endl;
+ 		else
+ 		{
+-			RTCIntersectArguments args;
+-			rtcInitIntersectArguments(&args);
+-			rtcIntersect1(*_scene.get(), &rh, &args);
++			RTCIntersectContext context;
++			rtcInitIntersectContext(&context);
++			rtcIntersect1(*_scene.get(), &context, &rh);
+ 			rh.hit.Ng_x = -rh.hit.Ng_x; // EMBREE_FIXME: only correct for triangles,quads, and subdivision surfaces
+ 			rh.hit.Ng_y = -rh.hit.Ng_y;
+ 			rh.hit.Ng_z = -rh.hit.Ng_z;
+@@ -319,9 +319,9 @@ namespace sibr
+ 			SIBR_ERR << "cannot initialize embree, failed cast rays." << std::endl;
+ 		else
+ 		{
+-			RTCIntersectArguments args;
+-			rtcInitIntersectArguments(&args);
+-			rtcIntersect8(valid8.data(), *_scene.get(), &rh, &args);
++			RTCIntersectContext context;
++			rtcInitIntersectContext(&context);
++			rtcIntersect8(valid8.data(), *_scene.get(), &context, &rh);
+ 		}
+ 
+ 		std::array<RayHit, 8> res;
+diff --git a/SIBR_viewers/src/core/raycaster/Raycaster.hpp b/SIBR_viewers/src/core/raycaster/Raycaster.hpp
+index dd5063a..121b502 100755
+--- a/SIBR_viewers/src/core/raycaster/Raycaster.hpp
++++ b/SIBR_viewers/src/core/raycaster/Raycaster.hpp
+@@ -13,8 +13,8 @@
+ #pragma once
+ 
+ # pragma warning(push, 0)
+-#  include <embree4/rtcore.h>
+-#  include <embree4/rtcore_ray.h>
++#  include <embree3/rtcore.h>
++#  include <embree3/rtcore_ray.h>
+ #  include <xmmintrin.h>	// functions for setting the control register
+ #  include <pmmintrin.h>	// functions for setting the control register
+ # pragma warning(pop)
+diff --git a/SIBR_viewers/src/core/system/Utils.cpp b/SIBR_viewers/src/core/system/Utils.cpp
+index edc8035..ea0d658 100755
+--- a/SIBR_viewers/src/core/system/Utils.cpp
++++ b/SIBR_viewers/src/core/system/Utils.cpp
+@@ -272,8 +272,7 @@ namespace sibr
+ 				return false;
+ 			}
+ 			if(overwrite) {
+-				// fs::copy_file(source, destination, boost::filesystem::copy_option::overwrite_if_exists);
+-				fs::copy_file(source, destination, boost::filesystem::copy_options::overwrite_existing);
++				fs::copy_file(source, destination, boost::filesystem::copy_option::overwrite_if_exists);
+ 			} else {
+ 				fs::copy_file(source, destination);
+ 			}
