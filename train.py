@@ -87,6 +87,9 @@ def training(
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):
+        # 随机背景色增加鲁棒性
+        background = torch.rand((3), device="cuda") if opt.random_background else background
+        
         if network_gui.conn == None:
             network_gui.try_connect()
         while network_gui.conn != None:
@@ -152,6 +155,16 @@ def training(
             render_pkg["radii"],
         )
         gt_image = viewpoint_cam.original_image.cuda()
+
+        gt_mask = viewpoint_cam.gt_mask.cuda() if viewpoint_cam.gt_mask is not None else None
+
+       # 分割掩码之外不参与训练
+        if gt_mask is not None:
+            mask = (gt_mask[0] > 0.5).float()   # [H, W]
+            mask = mask.unsqueeze(0)            # [1, H, W]
+            bg = background.view(3, 1, 1)
+            gt_image = gt_image * mask + bg * (1 - mask)
+
 
         Ll1_render = L1_loss_appearance(rendered_image, gt_image, gaussians, viewpoint_cam.uid)
         # normal consistency

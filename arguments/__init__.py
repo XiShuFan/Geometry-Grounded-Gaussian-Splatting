@@ -51,6 +51,7 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
+        self.masks = ""
         self._dataset = ""
         self._resolution = -1
         self._white_background = False
@@ -116,6 +117,8 @@ class OptimizationParams(ParamGroup):
         self.multi_view_patch_size = 3
         self.multi_view_pixel_noise_th = 1.0
         self.use_geo_occ_aware = True
+
+        self.random_background = False
 
         super().__init__(parser, "Optimization Parameters")
 

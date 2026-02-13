@@ -14,6 +14,8 @@ import numpy as np
 from utils.general_utils import PILtoTorch
 from utils.graphics_utils import fov2focal
 import torch
+from PIL import Image
+import os
 
 WARNED = False
 
@@ -48,9 +50,19 @@ def loadCam(args, id, cam_info, resolution_scale):
         loaded_mask = None
         gt_image = resized_image_rgb
 
+    # 分割掩码
+    if cam_info.mask_path is not None and os.path.exists(cam_info.mask_path):
+        mask_img = Image.open(cam_info.mask_path).convert('L')
+    else:
+        # 生成全白 mask，尺寸与原图一致
+        mask_img = Image.new('L', cam_info.image.size, 255)
+
+    # 转为 tensor
+    mask = PILtoTorch(mask_img, resolution)
+
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
-                  image=gt_image, gt_alpha_mask=loaded_mask,
+                  image=gt_image, gt_alpha_mask=loaded_mask, gt_mask=mask,
                   image_name=cam_info.image_name, uid=id, data_device=args.data_device)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
